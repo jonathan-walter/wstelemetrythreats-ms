@@ -1,0 +1,32 @@
+﻿detectLocation,reportcardRegion,notes
+Golden Gate,SFBay_north_of_hwy80br,
+Richmond Bridge,SFBay_north_of_hwy80br,boundary between report card regions
+Richmond Bridge,SanPabloBay,boundary between report card regions
+Carquinez Bridge,CarquinezStrait,boundary between report card regions
+Carquinez Bridge,SanPabloBay,boundary between report card regions
+Benicia Bridge,CarquinezStrait,boundary between report card regions
+Benicia Bridge,SuisunBay,boundary between report card regions
+Decker_IsS,SacR_RioVista_to_ChippsIsland,
+ThreeMile,SacR_RioVista_to_ChippsIsland,
+SR_RioVista,SacR_RioVista_to_ChippsIsland,boundary between report card regions
+SR_RioVista,SacR_KnightsLanding_to_RioVista,boundary between report card regions
+SR_Mouth,SacR_KnightsLanding_to_RioVista,
+SR_SteamboatSl,SacR_KnightsLanding_to_RioVista,
+PotatoSlough,SJR_Stockton_to_ShermanLake,
+FranksTractE,OldRiver,
+SJ_PrisonersPt,SJR_Stockton_to_ShermanLake,
+SJ_MedfordChannel,SJR_Stockton_to_ShermanLake,
+SJ_LittleConnection,SJR_Stockton_to_ShermanLake,
+Mok_PotatoS,SJR_Stockton_to_ShermanLake,
+Mok_NorthFork,SJR_Stockton_to_ShermanLake,
+Georg_SloughN,SacR_KnightsLanding_to_RioVista,
+SR_DCC,SacR_KnightsLanding_to_RioVista,
+Mok_SouthFork,SJR_Stockton_to_ShermanLake,
+SR_BlwSteam,SacR_KnightsLanding_to_RioVista,
+Steam_Marina,SacR_KnightsLanding_to_RioVista,
+SR_SutterSl,SacR_KnightsLanding_to_RioVista,
+SR_Freeport,SacR_KnightsLanding_to_RioVista,
+UpRiver,SacR_Colusa_to_KnightsLanding,
+UpRiver,SacR_hwy32br_to_Colusa,
+UpRiver,SacR_RedBluff_to_hwy32br,
+UpRiver,SacR_Upstream_of_RedBluff,
