@@ -4,7 +4,7 @@ rm(list=ls())
 library(lubridate)
 library(dplyr)
 library(RColorBrewer)
-library(rgdal)
+#library(rgdal) deprecated in new R version
 library(cluster)
 library(ecodist)
 library(scales)
@@ -12,12 +12,15 @@ library(car)
 library(vegan)
 library(abdiv)
 library(ncf)
-library(raster)
+#library(raster) deprecated in new R version
+library(terra)
+library(sf)
+library(viridis)
 
 ## ------------------------------------------------------------------------------------------------
 ## load and format data ---------------------------------------------------------------------------
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-dat <- read.csv("WSdetects_filtered_wy.csv")
+dat <- read.csv("WSdetects_filtered_wy_20241007.csv")
 generalAreaCoords <- read.csv("generalArea_coords.csv")
 
 goodLocs <- generalAreaCoords$GeneralArea
@@ -90,6 +93,9 @@ fishWYIDs <- fishWYIDs[-drop]
 occupancy_matrix <- occupancy_matrix[-drop,]
 
 
+#write.csv(occupancy_matrix, "occupancyMatrix.csv", row.names=FALSE)
+
+
 ## normalize to a proportion
 occupancy_matrix_norm<-occupancy_matrix
 for(ii in 1:nrow(occupancy_matrix)){
@@ -122,7 +128,7 @@ for(ii in 1:length(fishWYIDs)){
   detect.length[ii]<-round(max(tmp.ii$DetectDate,na.rm=T)-min(tmp.ii$DetectDate,na.rm=T))
   life.stage[ii]<-tmp.ii$Life_Stage[1]
   wateryear[ii]<-tmp.ii$waterYear[1]
-  studyID[ii]<-tmp.ii$StudyID
+  studyID[ii]<-tmp.ii$StudyID[1]
 }
 
 fish.summary<-cbind(fishWYIDs
@@ -161,9 +167,9 @@ age_from_length <- function(ll){
 fish.summary$tag_age <- floor(age_from_length(fish.summary$fishlength/10))
 fish.summary$age_est <- fish.summary$tag_age + (as.numeric(fish.summary$wateryear) - fish.summary$tagging.year)
 fish.summary$age_group <- NA
-fish.summary$age_group[fish.summary$age_est<=10] <- "Below Slot"
-fish.summary$age_group[fish.summary$age_est>10 & fish.summary$age_est <= 15] <- "Fishery"
-fish.summary$age_group[fish.summary$age_est>15] <- "Above Slot"
+fish.summary$age_group[fish.summary$age_est<=10] <- "Juvenile"
+fish.summary$age_group[fish.summary$age_est>10 & fish.summary$age_est <= 15] <- "Transitional"
+fish.summary$age_group[fish.summary$age_est>15] <- "Reproductive"
 #fish.summary$age_group[fish.summary$age_est>20] <- "Above Slot"
 fish.summary$age_group <- as.factor(fish.summary$age_group)
 fish.summary$fishID <- substr(fish.summary$fishWYIDs,1,8)
@@ -193,6 +199,7 @@ fish.summary$release.region[fish.summary$release.location %in% c("Grizzly_Bay","
 # occupancy_matrix_norm <- occupancy_matrix_norm[fish.summary$n_wy > 1,]
 # fish.summary <- fish.summary[fish.summary$n_wy > 1,]
 
+#write.csv(fish.summary, "fishSummary.csv", row.names=FALSE)
 
 ## ------------------------------------------------------------------------------------------------
 ## Begin dissimilarity analyses -------------------------------------------------------------------
@@ -266,48 +273,48 @@ summary(sumDiffs_surr)
 rank(c(sum(occupancy_dist), sumDiffs_surr))[1]/1001 #largest, by a wide margin
 
 
-# Is there more dispersion among fish or among water years? ---------------------------------------
-fishWYIDs <- fish.summary$fishWYIDs
-
-same_fish <- matrix(NA, length(fishWYIDs), length(fishWYIDs))
-same_wyear <- matrix(NA, length(fishWYIDs), length(fishWYIDs))
-
-for(ii in 2:length(fishWYIDs)){
-  for(jj in 1:(ii-1)){
-    same_fish[ii,jj] <- ifelse(substr(fishWYIDs[ii],1,8)==substr(fishWYIDs[jj],1,8), 1, NA)
-    same_wyear[ii,jj] <- ifelse(substr(fishWYIDs[ii],10,13)==substr(fishWYIDs[jj],10,13), 1, NA)
-  }
-}
-
-
-png("~/GitHub/fishsync/WhiteSturgeonOccupancy/fig_distance_btwfish_btwyr.png", units="in", 
-    width=6.5, height=6.5, res=150)
-par(mfrow=c(2,1), mar=c(4.1,4.1,2.1,1.1))
-hist(occupancy_dist*same_fish[lower.tri(same_fish)], xlim=c(0,1.5), 
-     xlab="Hellinger distance", main="same fish, different year")
-hist(occupancy_dist*same_wyear[lower.tri(same_wyear)], xlim=c(0,1.5),
-     xlab="Hellinger distance", main="same year, different fish")
-dev.off()
-
-#test significance using resampling
-
-diff.fishwy <- abs(median(occupancy_dist*same_fish[lower.tri(same_fish)],na.rm=T) - 
-                     median(occupancy_dist*same_wyear[lower.tri(same_wyear)], na.rm=T))
-
-nrand = 1000
-diff.fishwy.surr <- rep(NA, nrand)
-
-for(ii in 1:nrand){
-  
-  shuffle <- sample(1:length(fishWYIDs), length(fishWYIDs), replace=TRUE)
-  dmat_surr <- occupancy_dist_matrix[shuffle,shuffle]
-  diff.fishwy.surr[ii] <- abs(median(dmat_surr*same_fish,na.rm=T) - 
-                                median(dmat_surr*same_wyear, na.rm=T))
-}
-
-summary(diff.fishwy.surr)
-rank(c(diff.fishwy, diff.fishwy.surr))[1]/1001 #largest, by a wide margin
-
+# # Is there more dispersion among fish or among water years? ---------------------------------------
+# fishWYIDs <- fish.summary$fishWYIDs
+# 
+# same_fish <- matrix(NA, length(fishWYIDs), length(fishWYIDs))
+# same_wyear <- matrix(NA, length(fishWYIDs), length(fishWYIDs))
+# 
+# for(ii in 2:length(fishWYIDs)){
+#   for(jj in 1:(ii-1)){
+#     same_fish[ii,jj] <- ifelse(substr(fishWYIDs[ii],1,8)==substr(fishWYIDs[jj],1,8), 1, NA)
+#     same_wyear[ii,jj] <- ifelse(substr(fishWYIDs[ii],10,13)==substr(fishWYIDs[jj],10,13), 1, NA)
+#   }
+# }
+# 
+# 
+# png("~/GitHub/fishsync/WhiteSturgeonOccupancy/fig_distance_btwfish_btwyr.png", units="in", 
+#     width=6.5, height=6.5, res=150)
+# par(mfrow=c(2,1), mar=c(4.1,4.1,2.1,1.1))
+# hist(occupancy_dist*same_fish[lower.tri(same_fish)], xlim=c(0,1.5), 
+#      xlab="Hellinger distance", main="same fish, different year")
+# hist(occupancy_dist*same_wyear[lower.tri(same_wyear)], xlim=c(0,1.5),
+#      xlab="Hellinger distance", main="same year, different fish")
+# dev.off()
+# 
+# #test significance using resampling
+# 
+# diff.fishwy <- abs(median(occupancy_dist*same_fish[lower.tri(same_fish)],na.rm=T) - 
+#                      median(occupancy_dist*same_wyear[lower.tri(same_wyear)], na.rm=T))
+# 
+# nrand = 1000
+# diff.fishwy.surr <- rep(NA, nrand)
+# 
+# for(ii in 1:nrand){
+#   
+#   shuffle <- sample(1:length(fishWYIDs), length(fishWYIDs), replace=TRUE)
+#   dmat_surr <- occupancy_dist_matrix[shuffle,shuffle]
+#   diff.fishwy.surr[ii] <- abs(median(dmat_surr*same_fish,na.rm=T) - 
+#                                 median(dmat_surr*same_wyear, na.rm=T))
+# }
+# 
+# summary(diff.fishwy.surr)
+# rank(c(diff.fishwy, diff.fishwy.surr))[1]/1001 #largest, by a wide margin
+# 
 
 
 ## PERMANOVA statistical model --------------------------------------------------------------------
@@ -368,7 +375,7 @@ for(ii in 1:nrow(keytypes)){
 
 
 
-pdf("~/GitHub/fishsync/WhiteSturgeonOccupancy/ws_occupancy_barplot_wy_bygroup_allfish.pdf", 
+pdf("./ws_occupancy_barplot_wy_bygroup_allfish_20241007.pdf", 
     onefile=TRUE)
 par(mar=c(8.5,3.5,3.5,0.5), mgp=c(2.2,0.5,0), tcl=-0.3)
 
@@ -399,16 +406,15 @@ dev.off()
 
 ## make some maps
 
-aboveSlot_avg <- colMeans(occupancy_matrix_norm[fish.summary$age_group=="Above Slot",])
-fishery_avg <- colMeans(occupancy_matrix_norm[fish.summary$age_group=="Fishery",])
-belowSlot_avg <- colMeans(occupancy_matrix_norm[fish.summary$age_group=="Below Slot",])
+aboveSlot_avg <- colMeans(occupancy_matrix_norm[fish.summary$age_group=="Reproductive",])
+fishery_avg <- colMeans(occupancy_matrix_norm[fish.summary$age_group=="Transitional",])
+belowSlot_avg <- colMeans(occupancy_matrix_norm[fish.summary$age_group=="Juvenile",])
 
-
-states <- readOGR("statesp020.shp")
+states <- read_sf("statesp020.shp")
 states <- states[states$STATE=="California",]
-bkgd <- readOGR("backrgound_layer.shp")
-water <- readOGR("/Volumes/GoogleDrive-108173464723009405822/My Drive/Synchrony of Movement/Data/GIS/CA_Hydro/CA_hydrology_Polygon.shp")
-water <- spTransform(water, CRS(proj4string(states)))
+bkgd <- read_sf("backrgound_layer.shp")
+water <- read_sf("CA_hydrology_Polygon.shp")
+water <- st_transform(water, crs(states))
 
 
 range(generalAreaCoords$Lon)
@@ -423,7 +429,7 @@ ptscale <- function(x, mm, mx, xx=NULL){
 }
 
 
-png("map_occ_by_size.png", width=6.5, height=3.25, 
+png("map_occ_by_size_20250317.png", width=6.5, height=3.25, 
     res=300, units="in")
 
 par(mfrow=c(1,3), mar=c(0.5,0.5,1.5,0.5))
@@ -438,34 +444,39 @@ txtpos[10] <- 1
 txtpos[11] <- 4
 txtpos[12] <- 4
 
-plot(states, col="grey70", border=NA, xlim=c(-122.7,-121.4), ylim=c(37.7,39))
-plot(bkgd, col="grey70", border=NA, add=TRUE)
-plot(water, col="skyblue3", border="skyblue3", add=TRUE)
+plot(st_geometry(states), col="grey70", border=NA, xlim=c(-122.7,-121.4), ylim=c(37.7,39))
+plot(st_geometry(bkgd), col="grey70", border=NA, add=TRUE)
+plot(st_geometry(water), col="skyblue3", border="skyblue3", add=TRUE)
 points(generalAreaCoords$Lon[sel], generalAreaCoords$Lat[sel], cex=ptscale(belowSlot_avg[sel],1,3,0.5),
        pch=21, col="white", bg="black")
 points(generalAreaCoords$Lon[!sel], generalAreaCoords$Lat[!sel], col="grey50")
-mtext("Below slot")
+mtext("Juvenile")
 legend("topleft",pch=21,pt.cex=c(1,1,2,3),col=c("grey50","white","white","white"),
        pt.bg=c(NA,"black","black","black"),legend=c("<0.01"," 0.01"," 0.25"," 0.50"),
        inset=0.01, bg=NA, title="Proportional\noccupancy", bty="n")
 text(x=generalAreaCoords$Lon, generalAreaCoords$Lat, labels=as.character(1:15), pos=txtpos)
 text(x= -122.3, y=37.7, "SF Bay", col="darkblue",cex=0.8)
 text(x=-122.5, y=38.1, "San Pablo Bay", col="darkblue",cex=0.8)
-text(x=-122.15, y=38.25, "Grizzly Bay", col="darkblue",cex=0.8)
-segments(x0=-122.15, y0=38.225, x1=-122.05, y1=38.13, col="darkblue", lwd=0.5)
+#text(x=-122.15, y=38.25, "Grizzly Bay", col="darkblue",cex=0.8)
+#segments(x0=-122.15, y0=38.225, x1=-122.05, y1=38.13, col="darkblue", lwd=0.5)
 text(x=-122, y=37.95, "Suisun Bay", col="darkblue",cex=0.8)
 segments(x0=-122, y0=37.97, x1=-121.95, y1=38.07, col="darkblue", lwd=0.5)
 text(x=-121.5, y=38.05, "Delta", col="darkblue", cex=0.8)
 text(x=-121.8, y=38.8, "Sacramento River", col="darkblue", cex=0.8, srt=-57)
 
+lines(x=c(-123, -122.65), y=rep(37.57,2), lwd=1.5)
+text(-122.65, 37.57, "50 km", pos=4)
+arrows(x0=-121.4, y0=37.57, y1=37.55+0.25, lwd=1.5, length=0.1)
+text(-121.4, 37.55+0.25, "N", pos=3)
+
 sel <- fishery_avg>0.01
-plot(states, col="grey70", border=NA, xlim=c(-122.7,-121.4), ylim=c(37.7,39))
-plot(bkgd, col="grey70", border=NA, add=TRUE)
-plot(water, col="skyblue3", border="skyblue3", add=TRUE)
+plot(st_geometry(states), col="grey70", border=NA, xlim=c(-122.7,-121.4), ylim=c(37.7,39))
+plot(st_geometry(bkgd), col="grey70", border=NA, add=TRUE)
+plot(st_geometry(water), col="skyblue3", border="skyblue3", add=TRUE)
 points(generalAreaCoords$Lon[sel], generalAreaCoords$Lat[sel], cex=ptscale(fishery_avg[sel],1,3,0.5),
        pch=21, col="white", bg="black")
 points(generalAreaCoords$Lon[!sel], generalAreaCoords$Lat[!sel], col="grey50")
-mtext("Fishery")
+mtext("Transitional")
 text(x=generalAreaCoords$Lon, generalAreaCoords$Lat, labels=as.character(1:15), pos=txtpos)
 #legend("topleft", pch=as.character(1:7), legend=generalAreaCoords$displayName[1:7], 
 #       inset=0.01, bg=NA, trace=TRUE)
@@ -473,13 +484,13 @@ text(x=generalAreaCoords$Lon, generalAreaCoords$Lat, labels=as.character(1:15), 
 text(-122.73, 38.8, pos=4, labels="1 Golden Gate\n2 Richmond Bridge\n3 Carquinez Bridge\n4 Benicia Bridge\n5 Decker Island\n6 Three Mile Slough\n7 Rio Vista")
 
 sel <-aboveSlot_avg>0.01
-plot(states, col="grey70", border=NA, xlim=c(-122.7,-121.4), ylim=c(37.7,39))
-plot(bkgd, col="grey70", border=NA, add=TRUE)
-plot(water, col="skyblue3", border="skyblue3", add=TRUE)
+plot(st_geometry(states), col="grey70", border=NA, xlim=c(-122.7,-121.4), ylim=c(37.7,39))
+plot(st_geometry(bkgd), col="grey70", border=NA, add=TRUE)
+plot(st_geometry(water), col="skyblue3", border="skyblue3", add=TRUE)
 points(generalAreaCoords$Lon[sel], generalAreaCoords$Lat[sel], cex=ptscale(aboveSlot_avg[sel],1,3,0.5),
        pch=21, col="white", bg="black")
 points(generalAreaCoords$Lon[!sel], generalAreaCoords$Lat[!sel], col="grey50")
-mtext("Above slot")
+mtext("Reproductive")
 text(x=generalAreaCoords$Lon, generalAreaCoords$Lat, labels=as.character(1:15), pos=txtpos)
 #legend("topleft", pch=as.character(8:15), legend=generalAreaCoords$displayName[8:15], 
 #       inset=0.01, bg=NA)
@@ -492,128 +503,128 @@ dev.off()
 
 
 # Water diversions --------------------------------------------------------------------------------
-
-
-divert_locs <- read.csv("/Users/jonathanwalter/Documents/Research/DATA/CaliWaterDiversions/diversion_locations.csv")
-divert_data <- read.csv("/Users/jonathanwalter/Documents/Research/DATA/CaliWaterDiversions/diversion_attributes.csv")
-
-divert_locs <- divert_locs[(grepl("DELTA", divert_locs$SOURCE_NAME)
-                            & !grepl("MENDOTA", divert_locs$SOURCE_NAME)) |
-                             grepl("GRIZZLY BAY", divert_locs$SOURCE_NAME) |
-                             (grepl("SACRAMENTO", divert_locs$SOURCE_NAME) &
-                                !grepl("SPRING", divert_locs$SOURCE_NAME)) |
-                             #grepl("YOLO BYPASS", divert_locs$SOURCE_NAME) |
-                             grepl("STEAMBOAT SLOUGH", divert_locs$SOURCE_NAME) |
-                             grepl("POTATO SLOUGH", divert_locs$SOURCE_NAME) |
-                             grepl("SUTTER SLOUGH", divert_locs$SOURCE_NAME),]
-
-#divert_locs <- divert_locs[divert_locs$LATITUDE > 37.0,]
-
-divert_locs <- divert_locs[!duplicated(divert_locs),]
-
-divert_locs <- divert_locs[,colnames(divert_locs) %in% c("POD_ID","LATITUDE","LONGITUDE","SOURCE_NAME")]
-
-divert_data <- divert_data[,colnames(divert_data) %in% c("CORE_POD_ID", "WR_STATUS", "FACE_VALUE_AMOUNT")]
-
-diversions <- inner_join(divert_locs, divert_data, by=c("POD_ID" = "CORE_POD_ID"))
-diversions <- diversions[complete.cases(diversions),]
-diversions <- diversions[!diversions$WR_STATUS %in% c("Cancelled","Revoked"),]
-
-
-plot(diversions$LONGITUDE, diversions$LATITUDE)
-
-dmat <- gcdist(generalAreaCoords$Lon, generalAreaCoords$Lat)
-
-summary(dmat[lower.tri(dmat)])
-
-
-
-#assign a diversion to the nearest location <---------------------------------
-
-diversion_to_sensorLoc <- rep(NA, nrow(diversions))
-maxdist <- 2
-
-for(ii in 1:nrow(diversions)){
-  
-  locdist<-rep(NA, nrow(generalAreaCoords))
-  for(jj  in 1:nrow(generalAreaCoords)){
-    
-    #locdist[jj] <- sqrt((diversions$LONGITUDE[ii] - sensorLocations$Lon[jj])^2 + (diversions$LATITUDE[ii] - sensorLocations$Lat[jj])^2)
-    locdist[jj] <- gcdist(x = c(diversions$LONGITUDE[ii], generalAreaCoords$Lon[jj]), 
-                          y=c(diversions$LATITUDE[ii], generalAreaCoords$Lat[jj]))[2,1]
-    
-  }
-  if(min(locdist) <= maxdist){
-    diversion_to_sensorLoc[ii] <- generalAreaCoords$GeneralArea[which.min(locdist)]
-  }
-  
-}
-
-n_diversions<-as.data.frame(table(diversion_to_sensorLoc))
-
-volume_to_sensorLoc <- data.frame(sensorLoc=diversion_to_sensorLoc,
-                                  volume=diversions$FACE_VALUE_AMOUNT)
-
-sum_Volume <- aggregate(volume ~ sensorLoc, data=volume_to_sensorLoc, FUN="sum")
-
-
-#apportion to groups based on proportional occupancy
-
-sensorLocations <- left_join(generalAreaCoords, n_diversions, by=c("GeneralArea" = "diversion_to_sensorLoc"))
-sensorLocations$Freq[is.na(sensorLocations$Freq)]<-0
-sensorLocations <- left_join(sensorLocations, sum_Volume, by=c("GeneralArea"="sensorLoc"))
-sensorLocations$volume[is.na(sensorLocations$volume)]<-0
-
-
-diversion_risk <- rep(0,length(fishWYIDs))
-
-for(fish in 1:length(fishWYIDs)){
-  
-  for(ll in 1:ncol(occupancy_matrix)){
-    
-    diversion_risk[fish] <- (diversion_risk[fish] +
-                               log10(sensorLocations$volume[sensorLocations$GeneralArea==goodLocs[ll]] *
-                               occupancy_matrix[fish,ll]+1))
-  }
-  
-}
-
-
-group_diversion_risk <- c(mean(diversion_risk[fish.summary$age_group=="Below Slot"]),
-                          mean(diversion_risk[fish.summary$age_group=="Fishery"]),
-                          mean(diversion_risk[fish.summary$age_group=="Above Slot"]))
-# group_diversion_risk.q25<- c(quantile(diversion_risk[fish.summary$age_group=="Below Slot"], 0.25),
-#                              quantile(diversion_risk[fish.summary$age_group=="Fishery"], 0.25),
-#                              quantile(diversion_risk[fish.summary$age_group=="Above Slot"], 0.25))
-# group_diversion_risk.q75<- c(quantile(diversion_risk[fish.summary$age_group=="Below Slot"], 0.75),
-#                              quantile(diversion_risk[fish.summary$age_group=="Fishery"], 0.75),
-#                              quantile(diversion_risk[fish.summary$age_group=="Above Slot"], 0.75))
-group_diversion_risk.sd <- c(sd(diversion_risk[fish.summary$age_group=="Below Slot"]),
-                             sd(diversion_risk[fish.summary$age_group=="Fishery"]),
-                             sd(diversion_risk[fish.summary$age_group=="Above Slot"]))
-
-
-pal=brewer.pal(3,"Set2")
-
-png("~/GitHub/fishsync/WhiteSturgeonOccupancy/diversion_risk.png", units="in", 
-    res=200, width=4.5, height=5.5)
-par(mar=c(4.1,4.1,1,1))
-bp<-barplot(group_diversion_risk, ylab="Diversion exposure index", ylim=c(0,13),
-            names.arg=c("Below Slot", "Fishery", "Above Slot"), col=pal)
-arrows(x0=c(bp), 
-       y0=group_diversion_risk-(group_diversion_risk.sd)/sqrt(c(24,114,119)),
-       x1=(bp),
-       y1=group_diversion_risk+(group_diversion_risk.sd)/sqrt(c(24,114,119)),
-       angle=90, code=3, length=0.1)
-
-dev.off()
-
+# 
+# 
+# divert_locs <- read.csv("diversion_locations.csv")
+# divert_data <- read.csv("diversion_attributes.csv")
+# 
+# divert_locs <- divert_locs[(grepl("DELTA", divert_locs$SOURCE_NAME)
+#                             & !grepl("MENDOTA", divert_locs$SOURCE_NAME)) |
+#                              grepl("GRIZZLY BAY", divert_locs$SOURCE_NAME) |
+#                              (grepl("SACRAMENTO", divert_locs$SOURCE_NAME) &
+#                                 !grepl("SPRING", divert_locs$SOURCE_NAME)) |
+#                              #grepl("YOLO BYPASS", divert_locs$SOURCE_NAME) |
+#                              grepl("STEAMBOAT SLOUGH", divert_locs$SOURCE_NAME) |
+#                              grepl("POTATO SLOUGH", divert_locs$SOURCE_NAME) |
+#                              grepl("SUTTER SLOUGH", divert_locs$SOURCE_NAME),]
+# 
+# #divert_locs <- divert_locs[divert_locs$LATITUDE > 37.0,]
+# 
+# divert_locs <- divert_locs[!duplicated(divert_locs),]
+# 
+# divert_locs <- divert_locs[,colnames(divert_locs) %in% c("POD_ID","LATITUDE","LONGITUDE","SOURCE_NAME")]
+# 
+# divert_data <- divert_data[,colnames(divert_data) %in% c("CORE_POD_ID", "WR_STATUS", "FACE_VALUE_AMOUNT")]
+# 
+# diversions <- inner_join(divert_locs, divert_data, by=c("POD_ID" = "CORE_POD_ID"))
+# diversions <- diversions[complete.cases(diversions),]
+# diversions <- diversions[!diversions$WR_STATUS %in% c("Cancelled","Revoked"),]
+# 
+# 
+# plot(diversions$LONGITUDE, diversions$LATITUDE)
+# 
+# dmat <- gcdist(generalAreaCoords$Lon, generalAreaCoords$Lat)
+# 
+# summary(dmat[lower.tri(dmat)])
+# 
+# 
+# 
+# #assign a diversion to the nearest location <---------------------------------
+# 
+# diversion_to_sensorLoc <- rep(NA, nrow(diversions))
+# maxdist <- 2
+# 
+# for(ii in 1:nrow(diversions)){
+#   
+#   locdist<-rep(NA, nrow(generalAreaCoords))
+#   for(jj  in 1:nrow(generalAreaCoords)){
+#     
+#     #locdist[jj] <- sqrt((diversions$LONGITUDE[ii] - sensorLocations$Lon[jj])^2 + (diversions$LATITUDE[ii] - sensorLocations$Lat[jj])^2)
+#     locdist[jj] <- gcdist(x = c(diversions$LONGITUDE[ii], generalAreaCoords$Lon[jj]), 
+#                           y=c(diversions$LATITUDE[ii], generalAreaCoords$Lat[jj]))[2,1]
+#     
+#   }
+#   if(min(locdist) <= maxdist){
+#     diversion_to_sensorLoc[ii] <- generalAreaCoords$GeneralArea[which.min(locdist)]
+#   }
+#   
+# }
+# 
+# n_diversions<-as.data.frame(table(diversion_to_sensorLoc))
+# 
+# volume_to_sensorLoc <- data.frame(sensorLoc=diversion_to_sensorLoc,
+#                                   volume=diversions$FACE_VALUE_AMOUNT)
+# 
+# sum_Volume <- aggregate(volume ~ sensorLoc, data=volume_to_sensorLoc, FUN="sum")
+# 
+# 
+# #apportion to groups based on proportional occupancy
+# 
+# sensorLocations <- left_join(generalAreaCoords, n_diversions, by=c("GeneralArea" = "diversion_to_sensorLoc"))
+# sensorLocations$Freq[is.na(sensorLocations$Freq)]<-0
+# sensorLocations <- left_join(sensorLocations, sum_Volume, by=c("GeneralArea"="sensorLoc"))
+# sensorLocations$volume[is.na(sensorLocations$volume)]<-0
+# 
+# 
+# diversion_risk <- rep(0,length(fishWYIDs))
+# 
+# for(fish in 1:length(fishWYIDs)){
+#   
+#   for(ll in 1:ncol(occupancy_matrix)){
+#     
+#     diversion_risk[fish] <- (diversion_risk[fish] +
+#                                log10(sensorLocations$volume[sensorLocations$GeneralArea==goodLocs[ll]] *
+#                                occupancy_matrix[fish,ll]+1))
+#   }
+#   
+# }
+# 
+# 
+# group_diversion_risk <- c(mean(diversion_risk[fish.summary$age_group=="Below Slot"]),
+#                           mean(diversion_risk[fish.summary$age_group=="Fishery"]),
+#                           mean(diversion_risk[fish.summary$age_group=="Above Slot"]))
+# # group_diversion_risk.q25<- c(quantile(diversion_risk[fish.summary$age_group=="Below Slot"], 0.25),
+# #                              quantile(diversion_risk[fish.summary$age_group=="Fishery"], 0.25),
+# #                              quantile(diversion_risk[fish.summary$age_group=="Above Slot"], 0.25))
+# # group_diversion_risk.q75<- c(quantile(diversion_risk[fish.summary$age_group=="Below Slot"], 0.75),
+# #                              quantile(diversion_risk[fish.summary$age_group=="Fishery"], 0.75),
+# #                              quantile(diversion_risk[fish.summary$age_group=="Above Slot"], 0.75))
+# group_diversion_risk.sd <- c(sd(diversion_risk[fish.summary$age_group=="Below Slot"]),
+#                              sd(diversion_risk[fish.summary$age_group=="Fishery"]),
+#                              sd(diversion_risk[fish.summary$age_group=="Above Slot"]))
+# 
+# 
+# pal=brewer.pal(3,"Set2")
+# 
+# png("diversion_risk_20241007.png", units="in", 
+#     res=200, width=4.5, height=5.5)
+# par(mar=c(4.1,4.1,1,1))
+# bp<-barplot(group_diversion_risk, ylab="Diversion exposure index", ylim=c(0,13),
+#             names.arg=c("Below Slot", "Fishery", "Above Slot"), col=pal)
+# arrows(x0=c(bp), 
+#        y0=group_diversion_risk-(group_diversion_risk.sd)/sqrt(c(24,114,119)),
+#        x1=(bp),
+#        y1=group_diversion_risk+(group_diversion_risk.sd)/sqrt(c(24,114,119)),
+#        angle=90, code=3, length=0.1)
+# 
+# dev.off()
+# 
 
 
 ## Fishing pressure -------------------------------------------------------------------------------
 
-reportcards.raw<-read.csv("~/GitHub/fishsync/WhiteSturgeonOccupancy/White_Sturgeon_ReportCard_Data_20210414.csv")
-loc_to_region<-read.csv("~/GitHub/fishsync/WhiteSturgeonOccupancy/detectLoc_to_reportcardRegion.csv")
+reportcards.raw<-read.csv("White_Sturgeon_ReportCard_Data_20210414.csv")
+loc_to_region<-read.csv("detectLoc_to_reportcardRegion.csv")
 
 #return_rate <- data.frame(year = 2007:2020,
 #                          rate = c(18.36, 13.63, 11.80, 11.33, 11.08, 11.20, 20.90,
@@ -659,6 +670,60 @@ caught_by_region <- data.frame(region = rownames(ncaught_loc_yr),
 kept_by_region <- data.frame(region = rownames(nkept_loc_yr),
                                n = rowMeans(nkept_loc_yr))
 
+
+## Map caught fish by region ----------------------------------------------------------------------
+
+rownames(caught_by_region)
+
+reportCardCoords <- data.frame(region = rownames(caught_by_region),
+                               lat = NA, lon=NA)
+reportCardCoords[reportCardCoords$region=="SFBay_south_of_hwy80br",2:3] <- c(37.648, -122.252)
+reportCardCoords[reportCardCoords$region=="SFBay_north_of_hwy80br",2:3] <- c(37.898, -122.413)
+reportCardCoords[reportCardCoords$region=="SanPabloBay",2:3] <- c(38.058, -122.389)
+reportCardCoords[reportCardCoords$region=="CarquinezStrait",2:3] <- c(38.058, -122.188)
+reportCardCoords[reportCardCoords$region=="SuisunBay",2:3] <- c(38.084, -122.029)
+reportCardCoords[reportCardCoords$region=="MontezumaSlough",2:3] <- c(38.138, -121.920)
+reportCardCoords[reportCardCoords$region=="SacR_RioVista_to_ChippsIsland",2:3] <- c(38.081, -121.753)
+reportCardCoords[reportCardCoords$region=="SacR_DeepW_Ship_Canal",2:3] <- c(38.411, -121.615)
+reportCardCoords[reportCardCoords$region=="YoloBypass",2:3] <- c(38.380, -121.659)
+reportCardCoords[reportCardCoords$region=="SacR_KnightsLanding_to_RioVista",2:3] <- c(38.531, -121.526)
+reportCardCoords[reportCardCoords$region=="SacR_Colusa_to_KnightsLanding",2:3] <- c(39.054, -121.841)
+reportCardCoords[reportCardCoords$region=="SacR_hwy32br_to_Colusa",2:3] <- c(39.498, -121.996)
+reportCardCoords[reportCardCoords$region=="SacR_RedBluff_to_hwy32br",2:3] <- c(39.987, -122.096)
+reportCardCoords[reportCardCoords$region=="SacR_Upstream_of_RedBluff",2:3] <- c(40.473, -122.305)
+
+
+scale_max1 <- function(x, maxn=NULL){
+  if(is.null(maxn)){maxn <- max(x, na.rm=TRUE)}
+  return(x/maxn)
+}
+
+pdf("map_sturgeon_catch.pdf", width=3.25, height=6)
+par(mar=rep(0.25,4))
+plot(st_geometry(states), col="grey70", border=NA, xlim=c(-122.7,-121.4), ylim=c(37.6,40))
+plot(st_geometry(bkgd), col="grey70", border=NA, add=TRUE)
+plot(st_geometry(water), col="skyblue3", border="skyblue3", add=TRUE)
+points(reportCardCoords$lon, reportCardCoords$lat, cex=scale_max1(caught_by_region$n, maxn=2300)*4.75)
+lines(x=c(-123, -122.65), y=rep(37.55,2), lwd=2)
+text(-122.65, 37.55, "50 km", pos=4)
+arrows(x0=-121.22, y0=37.55, y1=37.55+0.5, lwd=2, length=0.1)
+text(-121.22, 37.55+0.5, "N", pos=3)
+
+text(x= -122.3, y=37.7, "SF Bay", col="darkblue",cex=0.8)
+text(x=-122.5, y=38.1, "San Pablo Bay", col="darkblue",cex=0.8)
+#text(x=-122.15, y=38.25, "Grizzly Bay", col="darkblue",cex=0.8)
+#segments(x0=-122.15, y0=38.225, x1=-122.05, y1=38.13, col="darkblue", lwd=0.5)
+text(x=-122, y=37.95, "Suisun Bay", col="darkblue",cex=0.8)
+segments(x0=-122, y0=37.97, x1=-121.95, y1=38.07, col="darkblue", lwd=0.5)
+text(x=-121.5, y=38.05, "Delta", col="darkblue", cex=0.8)
+text(x=-121.8, y=38.8, "Sacramento River", col="darkblue", cex=0.8, srt=-57)
+
+legend("topleft", pch=1, pt.cex=c(0.001, 0.33, 0.66, 1)*4.75, legend=c(0, 750, 1500, 2300),
+       inset=0.02, bg=NA, title="Fish caught (n)", bty="n", x.intersp= 1.4, y.intersp=c(1,1,1.5,2))
+
+dev.off()
+
+## Make index
 
 detectLocs <- colnames(occupancy_matrix)
 detectLocs <- gsub("\\."," ",detectLocs)
@@ -723,75 +788,33 @@ risk_index_caught <- risk_index_caught/sum(caught_by_region$n)#$Freq[caught_by_r
 
 
 
-group_risk_index_kept <- c(mean(risk_index_kept[fish.summary$age_group=="Below Slot"]),
-                           mean(risk_index_kept[fish.summary$age_group=="Fishery"]),
-                           mean(risk_index_kept[fish.summary$age_group=="Above Slot"]))
-# group_risk_index_kept.q25 <- c(quantile(risk_index_kept[fish.summary$age_group=="Below Slot"], 0.25),
-#                                quantile(risk_index_kept[fish.summary$age_group=="Fishery"], 0.25),
-#                                quantile(risk_index_kept[fish.summary$age_group=="Above Slot"], 0.25))
-# group_risk_index_kept.q75 <- c(quantile(risk_index_kept[fish.summary$age_group=="Below Slot"], 0.75),
-#                                quantile(risk_index_kept[fish.summary$age_group=="Fishery"], 0.75),
-#                                quantile(risk_index_kept[fish.summary$age_group=="Above Slot"], 0.75))
-group_risk_index_kept.sd <- c(sd(risk_index_kept[fish.summary$age_group=="Below Slot"]),
-                           sd(risk_index_kept[fish.summary$age_group=="Fishery"]),
-                           sd(risk_index_kept[fish.summary$age_group=="Above Slot"]))
+group_risk_index_kept <- c(mean(risk_index_kept[fish.summary$age_group=="Juvenile"]),
+                           mean(risk_index_kept[fish.summary$age_group=="Transitional"]),
+                           mean(risk_index_kept[fish.summary$age_group=="Reproductive"]))
 
-group_risk_index_caught <- c(mean(risk_index_caught[fish.summary$age_group=="Below Slot"]),
-                             mean(risk_index_caught[fish.summary$age_group=="Fishery"]),
-                             mean(risk_index_caught[fish.summary$age_group=="Above Slot"]))
-# group_risk_index_caught.q25<- c(quantile(risk_index_caught[fish.summary$age_group=="Below Slot"], 0.25),
-#                                 quantile(risk_index_caught[fish.summary$age_group=="Fishery"], 0.25),
-#                                 quantile(risk_index_caught[fish.summary$age_group=="Above Slot"], 0.25))
-# group_risk_index_caught.q75<- c(quantile(risk_index_caught[fish.summary$age_group=="Below Slot"], 0.75),
-#                                 quantile(risk_index_caught[fish.summary$age_group=="Fishery"], 0.75),
-#                                 quantile(risk_index_caught[fish.summary$age_group=="Above Slot"], 0.75))
-group_risk_index_caught.sd <- c(sd(risk_index_caught[fish.summary$age_group=="Below Slot"]),
-                             sd(risk_index_caught[fish.summary$age_group=="Fishery"]),
-                             sd(risk_index_caught[fish.summary$age_group=="Above Slot"]))
+group_risk_index_kept.sd <- c(sd(risk_index_kept[fish.summary$age_group=="Juvenile"]),
+                           sd(risk_index_kept[fish.summary$age_group=="Transitional"]),
+                           sd(risk_index_kept[fish.summary$age_group=="Reproductive"]))
+
+group_risk_index_caught <- c(mean(risk_index_caught[fish.summary$age_group=="Juvenile"]),
+                             mean(risk_index_caught[fish.summary$age_group=="Transitional"]),
+                             mean(risk_index_caught[fish.summary$age_group=="Reproductive"]))
+
+group_risk_index_caught.sd <- c(sd(risk_index_caught[fish.summary$age_group=="Juvenile"]),
+                             sd(risk_index_caught[fish.summary$age_group=="Transitional"]),
+                             sd(risk_index_caught[fish.summary$age_group=="Reproductive"]))
 
 pal1 = brewer.pal(3, "Set2")
 pal2 = brewer.pal(3, "Dark2")
 
-png("~/GitHub/fishsync/WhiteSturgeonOccupancy/fishing_risk_wy.png", res=300, units="in", width=4.5, height=5.5)
-par(mar=c(4.1,4.1,1,1))
-bp<-barplot(rbind(group_risk_index_caught,group_risk_index_kept), beside=T,
-            #density=c(0,10),
-            col=rep(pal1, each=2), ylim=c(0,10),
-            legend.text = NULL, ylab="Fishing capture index",
-            names.arg = c("Below slot", "Fishery", "Above slot"),
-            args.legend=list(x="topright", inset=0.05))
-barplot(rbind(group_risk_index_caught,group_risk_index_kept), beside=T,
-        density=c(0,10), add=TRUE,
-        col=NA,
-        legend.text = c("caught","kept"), ylab="Fishing capture index",
-        names.arg = NULL,
-        args.legend=list(x="topright", inset=0.05))
-arrows(x0=c(bp), 
-       y0=c(rbind(group_risk_index_caught,group_risk_index_kept)) -
-          c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
-                  group_risk_index_kept.sd/sqrt(c(24,114,119)))),
-       x1=c(bp),
-       y1=c(rbind(group_risk_index_caught,group_risk_index_kept)) +
-          c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
-                  group_risk_index_kept.sd/sqrt(c(24,114,119)))),
-       angle=90, code=3, length=0.1)
-
-dev.off()
-
-barplot(colSums(ncaught_loc_yr.corr))
-barplot(rowMeans(ncaught_loc_yr.corr), las=2)
-
-png("~/GitHub/fishsync/WhiteSturgeonOccupancy/risk_indices_combined.png", units="in", 
-    res=300, width=6.5, height=4)
-par(mar=c(3.1,4.1,1,1), mfrow=c(1,2))
-
-#bp<-barplot(rbind(group_risk_index_caught,group_risk_index_kept), beside=T,
-bp<-barplot(group_risk_index_caught,
-            #density=c(0,10),
-            col=pal, ylim=c(0,11),
-            legend.text = NULL, ylab="Fishing capture index",
-            names.arg = c("Below", "Fishery", "Above"),
-            args.legend=list(x="topright", inset=0.05))
+# png("fishing_risk_wy_20250317.png", res=300, units="in", width=4.5, height=5.5)
+# par(mar=c(4.1,4.1,1,1))
+# bp<-barplot(rbind(group_risk_index_caught,group_risk_index_kept), beside=T,
+#             #density=c(0,10),
+#             col=rep(pal1, each=2), ylim=c(0,10),
+#             legend.text = NULL, ylab="Fishing capture index",
+#             names.arg = c("Juvenile", "Transitional", "Reproductive"),
+#             args.legend=list(x="topright", inset=0.05))
 # barplot(rbind(group_risk_index_caught,group_risk_index_kept), beside=T,
 #         density=c(0,10), add=TRUE,
 #         col=NA,
@@ -800,152 +823,259 @@ bp<-barplot(group_risk_index_caught,
 #         args.legend=list(x="topright", inset=0.05))
 # arrows(x0=c(bp), 
 #        y0=c(rbind(group_risk_index_caught,group_risk_index_kept)) -
-#          c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
-#                  group_risk_index_kept.sd/sqrt(c(24,114,119)))),
+#           c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
+#                   group_risk_index_kept.sd/sqrt(c(24,114,119)))),
 #        x1=c(bp),
 #        y1=c(rbind(group_risk_index_caught,group_risk_index_kept)) +
-#          c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
-#                  group_risk_index_kept.sd/sqrt(c(24,114,119)))),
+#           c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
+#                   group_risk_index_kept.sd/sqrt(c(24,114,119)))),
 #        angle=90, code=3, length=0.1)
+# 
+# dev.off()
+
+png("fishing_risk_wy_20250317.png", res=300, units="in", width=4.5, height=5.5)
+par(mar=c(4.1,4.1,1,1))
+bp<-barplot(group_risk_index_caught, beside=T,
+            #density=c(0,10),
+            col=pal1, ylim=c(0,11),
+            legend.text = NULL, ylab="Fishing capture index",
+            names.arg = c("Juvenile", "Transitional", "Reproductive"),
+            args.legend=list(x="topright", inset=0.05))
 arrows(x0=c(bp), 
-       y0=group_risk_index_caught -
-         group_risk_index_caught.sd/sqrt(c(24,114,119)),
+       y0=group_risk_index_caught - group_risk_index_caught.sd/sqrt(c(21,110,112)),
        x1=c(bp),
-       y1=group_risk_index_caught +
-         group_risk_index_caught.sd/sqrt(c(24,114,119)),
-       angle=90, code=3, length=0.1)
-
-bp<-barplot(group_diversion_risk, ylab="Habitat modification index", ylim=c(0,13),
-            names.arg=c("Below", "Fishery", "Above"), col=pal)
-arrows(x0=c(bp), 
-       y0=group_diversion_risk-(group_diversion_risk.sd)/sqrt(c(24,114,119)),
-       x1=(bp),
-       y1=group_diversion_risk+(group_diversion_risk.sd)/sqrt(c(24,114,119)),
+       y1=group_risk_index_caught + group_risk_index_caught.sd/sqrt(c(21,110,112)),
        angle=90, code=3, length=0.1)
 
 dev.off()
 
 
+#barplot(colSums(ncaught_loc_yr.corr))
+#barplot(rowMeans(ncaught_loc_yr.corr), las=2)
+
+# png("risk_indices_combined_20241007.png", units="in", 
+#     res=300, width=6.5, height=4)
+# par(mar=c(3.1,4.1,1,1), mfrow=c(1,2))
+# 
+# #bp<-barplot(rbind(group_risk_index_caught,group_risk_index_kept), beside=T,
+# bp<-barplot(group_risk_index_caught,
+#             #density=c(0,10),
+#             col=pal, ylim=c(0,11),
+#             legend.text = NULL, ylab="Fishing capture index",
+#             names.arg = c("Below", "Fishery", "Above"),
+#             args.legend=list(x="topright", inset=0.05))
+# # barplot(rbind(group_risk_index_caught,group_risk_index_kept), beside=T,
+# #         density=c(0,10), add=TRUE,
+# #         col=NA,
+# #         legend.text = c("caught","kept"), ylab="Fishing capture index",
+# #         names.arg = NULL,
+# #         args.legend=list(x="topright", inset=0.05))
+# # arrows(x0=c(bp), 
+# #        y0=c(rbind(group_risk_index_caught,group_risk_index_kept)) -
+# #          c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
+# #                  group_risk_index_kept.sd/sqrt(c(24,114,119)))),
+# #        x1=c(bp),
+# #        y1=c(rbind(group_risk_index_caught,group_risk_index_kept)) +
+# #          c(rbind(group_risk_index_caught.sd/sqrt(c(24,114,119)),
+# #                  group_risk_index_kept.sd/sqrt(c(24,114,119)))),
+# #        angle=90, code=3, length=0.1)
+# arrows(x0=c(bp), 
+#        y0=group_risk_index_caught -
+#          group_risk_index_caught.sd/sqrt(c(24,114,119)),
+#        x1=c(bp),
+#        y1=group_risk_index_caught +
+#          group_risk_index_caught.sd/sqrt(c(24,114,119)),
+#        angle=90, code=3, length=0.1)
+# 
+# bp<-barplot(group_diversion_risk, ylab="Habitat modification index", ylim=c(0,13),
+#             names.arg=c("Below", "Fishery", "Above"), col=pal)
+# arrows(x0=c(bp), 
+#        y0=group_diversion_risk-(group_diversion_risk.sd)/sqrt(c(24,114,119)),
+#        x1=(bp),
+#        y1=group_diversion_risk+(group_diversion_risk.sd)/sqrt(c(24,114,119)),
+#        angle=90, code=3, length=0.1)
+# 
+# dev.off()
 
 
-## bathymery analyses -----------------------------------------------------------------------------
+## make a abacus plot of detections for the used fish ---------------------------------------------
 
-bathy <- raster("/Users/jonathanwalter/Desktop/SanFranciscoBay/sfbaydeltadem10m2016.asc")
-
-generalAreaPoints <- SpatialPoints(coords=cbind(generalAreaCoords$Lon, 
-                                                generalAreaCoords$Lat),
-                                   proj4string = CRS("+init=EPSG:4269"))
-
-generalAreaPoints <- spTransform(generalAreaPoints, CRS(proj4string(bathy)))
-
-plot(bathy)
-points(generalAreaPoints)
-
-maxdist=2 
-
-generalAreaBuffer <- buffer(generalAreaPoints, width=maxdist*1000, dissolve=FALSE) #convert km to m
+pal <- magma(nrow(sensorLocations))
 
 
+stimes<-seq(from=as.Date("2010-10-01"), to=as.Date("2017-09-30"), by=1)
+fishIDs2 <- unique(fish.summary$fishID)
 
+dat_agg <- unique(data.frame(FishID=dat$FishID,
+                             DetectDate=dat$DetectDate,
+                             GeneralArea=dat$GeneralArea))
+dat_agg$GeneralAreaFac <- factor(dat_agg$GeneralArea, 
+                              levels=c("Golden Gate","Richmond Bridge","Carquinez Bridge",
+                                       "Benicia Bridge","Decker_IsS","ThreeMile","SR_RioVista",
+                                       "SR_SteamboatSl","Georg_SloughN","SR_DCC","SR_BlwSteam",
+                                       "SR_SutterSl","SR_Freeport","UpRiver"))
 
-water.prj <- spTransform(water, CRS(proj4string(bathy)))
-
-bathy_mask <- mask(bathy, water.prj)
-
-quantile(values(bathy_mask), na.rm=T)
-
-plot(bathy_mask)
-
-median_depth <- rep(NA, length(generalAreaBuffer))
-
-for(ii in 1:length(generalAreaBuffer)){
-  tmp <- crop(bathy_mask, generalAreaBuffer[ii])
-  tmp <- mask(tmp, generalAreaBuffer[ii])
-  median_depth[ii] <- median(values(tmp), na.rm=TRUE)
+png("fig_abacusplot_20241007.png", res=450, units="in", width=8.5, height=11)
+layout(matrix(1:2),heights=c(0.2,0.8))
+par(mar=c(9.1,6.1,1.1,1.1))
+image(x=1:15,z=matrix(1:15), col=pal, xaxt="n", yaxt="n", xlab="", ylab="")
+axis(1, at=1:15, labels=generalAreaCoords$displayName, las=2)
+par(mar=c(6.1,6.1,0.5,1.1))
+plot(NA,NA,xlim=range(stimes),ylim=c(0,length(fishIDs2)+1), yaxt="n", ylab="", xaxt="n", xlab="",
+     yaxs="i")
+abline(h=1:length(fishIDs2), col="grey")
+axis(2, at=1:length(fishIDs2), labels=fishIDs2, las=2, cex=0.8)
+axis(1, at=as.Date(c("2009-10-01","2010-10-01","2011-10-01","2012-10-01","2013-10-01","2014-10-01",
+                   "2015-10-01","2016-10-01","2017-10-01")), 
+     labels=c("2009-10-01","2010-10-01","2011-10-01","2012-10-01","2013-10-01","2014-10-01",
+              "2015-10-01","2016-10-01","2017-10-01"), las=2)
+for(ii in 1:length(fishIDs2)){
+  tmp <- dat_agg[dat_agg$FishID==fishIDs2[ii],]
+  points(tmp$DetectDate, rep(ii, nrow(tmp)), pch=16, cex=0.6, col=pal[tmp$GeneralAreaFac])
 }
-
-
-depth_occupancy <- rep(NA, nrow(fish.summary))
-depth_occupancy_BAY <- rep(NA, nrow(fish.summary))
-depth_occupancy_DELTA <- rep(NA, nrow(fish.summary))
-
-for(ii in 1:length(depth_occupancy)){
-  depth_occupancy[ii] <- weighted.mean(median_depth, occupancy_matrix_norm[ii,])
-  depth_occupancy_BAY[ii] <- weighted.mean(median_depth[1:4], occupancy_matrix_norm[ii,1:4])
-  depth_occupancy_DELTA[ii] <- weighted.mean(median_depth[5:15], occupancy_matrix_norm[ii,5:15])
-}
-
-depth_occ_bySize <- c(
-  mean(depth_occupancy[fish.summary$age_group=="Below Slot"]),
-  mean(depth_occupancy[fish.summary$age_group=="Fishery"]),
-  mean(depth_occupancy[fish.summary$age_group=="Above Slot"])
-)
-
-depth_occ_bySize.sd <- c(
-  sd(depth_occupancy[fish.summary$age_group=="Below Slot"]),
-  sd(depth_occupancy[fish.summary$age_group=="Fishery"]),
-  sd(depth_occupancy[fish.summary$age_group=="Above Slot"])
-)
-
-depth_occ_bySize_BAY <- c(
-  mean(depth_occupancy_BAY[fish.summary$age_group=="Below Slot"], na.rm=T),
-  mean(depth_occupancy_BAY[fish.summary$age_group=="Fishery"], na.rm=T),
-  mean(depth_occupancy_BAY[fish.summary$age_group=="Above Slot"], na.rm=T)
-)
-
-depth_occ_bySize_BAY.sd <- c(
-  sd(depth_occupancy_BAY[fish.summary$age_group=="Below Slot"], na.rm=T),
-  sd(depth_occupancy_BAY[fish.summary$age_group=="Fishery"], na.rm=T),
-  sd(depth_occupancy_BAY[fish.summary$age_group=="Above Slot"], na.rm=T)
-)
-
-depth_occ_bySize_DELTA <- c(
-  mean(depth_occupancy_DELTA[fish.summary$age_group=="Below Slot"], na.rm=T),
-  mean(depth_occupancy_DELTA[fish.summary$age_group=="Fishery"], na.rm=T),
-  mean(depth_occupancy_DELTA[fish.summary$age_group=="Above Slot"], na.rm=T)
-)
-
-depth_occ_bySize_DELTA.sd <- c(
-  sd(depth_occupancy_DELTA[fish.summary$age_group=="Below Slot"], na.rm=T),
-  sd(depth_occupancy_DELTA[fish.summary$age_group=="Fishery"], na.rm=T),
-  sd(depth_occupancy_DELTA[fish.summary$age_group=="Above Slot"], na.rm=T)
-)
-
-
-
-png("~/GitHub/fishsync/WhiteSturgeonOccupancy/depth.png", units="in", 
-    res=300, width=6.5, height=3.5)
-
-par(mfrow=c(1,3), mar=c(2.6,4.1,1.6,1.1))
-
-bp=barplot(depth_occ_bySize, ylim=c(-12,0), col=pal, names.arg=c("Below","Fishery","Above"),
-           ylab="Elevation (m)")
-arrows(x0=c(bp), 
-       y0=depth_occ_bySize-(depth_occ_bySize.sd)/sqrt(c(24,114,119)),
-       x1=(bp),
-       y1=depth_occ_bySize+(depth_occ_bySize.sd)/sqrt(c(24,114,119)),
-       angle=90, code=3, length=0.1)
-mtext("All Study Area", line=0.2, cex=2/3)
-mtext("a)", line=0.2, cex=2/3, at=0)
-
-bp=barplot(depth_occ_bySize_BAY, ylim=c(-13,0), col=pal, names.arg=c("Below","Fishery","Above"),
-           ylab="Elevation (m)")
-arrows(x0=c(bp), 
-       y0=depth_occ_bySize_BAY-(depth_occ_bySize_BAY.sd)/sqrt(c(24,114,119)),
-       x1=(bp),
-       y1=depth_occ_bySize_BAY+(depth_occ_bySize_BAY.sd)/sqrt(c(24,114,119)),
-       angle=90, code=3, length=0.1)
-mtext("Bay", line=0.2, cex=2/3)
-mtext("b)", line=0.2, cex=2/3, at=0)
-
-bp=barplot(depth_occ_bySize_DELTA, ylim=c(-9,0), col=pal, names.arg=c("Below","Fishery","Above"),
-           ylab="Elevation (m)")
-arrows(x0=c(bp), 
-       y0=depth_occ_bySize_DELTA-(depth_occ_bySize_DELTA.sd)/sqrt(c(24,114,119)),
-       x1=(bp),
-       y1=depth_occ_bySize_DELTA+(depth_occ_bySize_DELTA.sd)/sqrt(c(24,114,119)),
-       angle=90, code=3, length=0.1)
-mtext("Delta & SR", line=0.2, cex=2/3)
-mtext("c)", line=0.2, cex=2/3, at=0)
-
 dev.off()
+
+
+
+## check whether probability of having another year of data depends on size class
+
+fish.summary$nextWY <- 0
+
+for(ii in 1:nrow(fish.summary)){
+  
+  if(any(fish.summary$fishID==fish.summary$fishID[ii] & as.numeric(fish.summary$wateryear)==as.numeric(fish.summary$wateryear[ii])+1)){
+    fish.summary$nextWY[ii] <- 1
+  }
+  
+}
+
+table(fish.summary$nextWY)
+aggregate(nextWY ~ age_group, data=fish.summary, FUN=mean)
+
+m1 <- glm(nextWY ~ age_group, data=fish.summary, family="binomial")
+anova(m1)
+
+
+
+# ## bathymery analyses -----------------------------------------------------------------------------
+# Commented out as this analysis is not retained in new version
+# 
+# bathy <- raster("/Users/jonathanwalter/Desktop/SanFranciscoBay/sfbaydeltadem10m2016.asc")
+# 
+# generalAreaPoints <- SpatialPoints(coords=cbind(generalAreaCoords$Lon, 
+#                                                 generalAreaCoords$Lat),
+#                                    proj4string = CRS("+init=EPSG:4269"))
+# 
+# generalAreaPoints <- spTransform(generalAreaPoints, CRS(proj4string(bathy)))
+# 
+# plot(bathy)
+# points(generalAreaPoints)
+# 
+# maxdist=2 
+# 
+# generalAreaBuffer <- buffer(generalAreaPoints, width=maxdist*1000, dissolve=FALSE) #convert km to m
+# 
+# 
+# 
+# 
+# water.prj <- spTransform(water, CRS(proj4string(bathy)))
+# 
+# bathy_mask <- mask(bathy, water.prj)
+# 
+# quantile(values(bathy_mask), na.rm=T)
+# 
+# plot(bathy_mask)
+# 
+# median_depth <- rep(NA, length(generalAreaBuffer))
+# 
+# for(ii in 1:length(generalAreaBuffer)){
+#   tmp <- crop(bathy_mask, generalAreaBuffer[ii])
+#   tmp <- mask(tmp, generalAreaBuffer[ii])
+#   median_depth[ii] <- median(values(tmp), na.rm=TRUE)
+# }
+# 
+# 
+# depth_occupancy <- rep(NA, nrow(fish.summary))
+# depth_occupancy_BAY <- rep(NA, nrow(fish.summary))
+# depth_occupancy_DELTA <- rep(NA, nrow(fish.summary))
+# 
+# for(ii in 1:length(depth_occupancy)){
+#   depth_occupancy[ii] <- weighted.mean(median_depth, occupancy_matrix_norm[ii,])
+#   depth_occupancy_BAY[ii] <- weighted.mean(median_depth[1:4], occupancy_matrix_norm[ii,1:4])
+#   depth_occupancy_DELTA[ii] <- weighted.mean(median_depth[5:15], occupancy_matrix_norm[ii,5:15])
+# }
+# 
+# depth_occ_bySize <- c(
+#   mean(depth_occupancy[fish.summary$age_group=="Below Slot"]),
+#   mean(depth_occupancy[fish.summary$age_group=="Fishery"]),
+#   mean(depth_occupancy[fish.summary$age_group=="Above Slot"])
+# )
+# 
+# depth_occ_bySize.sd <- c(
+#   sd(depth_occupancy[fish.summary$age_group=="Below Slot"]),
+#   sd(depth_occupancy[fish.summary$age_group=="Fishery"]),
+#   sd(depth_occupancy[fish.summary$age_group=="Above Slot"])
+# )
+# 
+# depth_occ_bySize_BAY <- c(
+#   mean(depth_occupancy_BAY[fish.summary$age_group=="Below Slot"], na.rm=T),
+#   mean(depth_occupancy_BAY[fish.summary$age_group=="Fishery"], na.rm=T),
+#   mean(depth_occupancy_BAY[fish.summary$age_group=="Above Slot"], na.rm=T)
+# )
+# 
+# depth_occ_bySize_BAY.sd <- c(
+#   sd(depth_occupancy_BAY[fish.summary$age_group=="Below Slot"], na.rm=T),
+#   sd(depth_occupancy_BAY[fish.summary$age_group=="Fishery"], na.rm=T),
+#   sd(depth_occupancy_BAY[fish.summary$age_group=="Above Slot"], na.rm=T)
+# )
+# 
+# depth_occ_bySize_DELTA <- c(
+#   mean(depth_occupancy_DELTA[fish.summary$age_group=="Below Slot"], na.rm=T),
+#   mean(depth_occupancy_DELTA[fish.summary$age_group=="Fishery"], na.rm=T),
+#   mean(depth_occupancy_DELTA[fish.summary$age_group=="Above Slot"], na.rm=T)
+# )
+# 
+# depth_occ_bySize_DELTA.sd <- c(
+#   sd(depth_occupancy_DELTA[fish.summary$age_group=="Below Slot"], na.rm=T),
+#   sd(depth_occupancy_DELTA[fish.summary$age_group=="Fishery"], na.rm=T),
+#   sd(depth_occupancy_DELTA[fish.summary$age_group=="Above Slot"], na.rm=T)
+# )
+# 
+# 
+# 
+# png("~/GitHub/fishsync/WhiteSturgeonOccupancy/depth.png", units="in", 
+#     res=300, width=6.5, height=3.5)
+# 
+# par(mfrow=c(1,3), mar=c(2.6,4.1,1.6,1.1))
+# 
+# bp=barplot(depth_occ_bySize, ylim=c(-12,0), col=pal, names.arg=c("Below","Fishery","Above"),
+#            ylab="Elevation (m)")
+# arrows(x0=c(bp), 
+#        y0=depth_occ_bySize-(depth_occ_bySize.sd)/sqrt(c(24,114,119)),
+#        x1=(bp),
+#        y1=depth_occ_bySize+(depth_occ_bySize.sd)/sqrt(c(24,114,119)),
+#        angle=90, code=3, length=0.1)
+# mtext("All Study Area", line=0.2, cex=2/3)
+# mtext("a)", line=0.2, cex=2/3, at=0)
+# 
+# bp=barplot(depth_occ_bySize_BAY, ylim=c(-13,0), col=pal, names.arg=c("Below","Fishery","Above"),
+#            ylab="Elevation (m)")
+# arrows(x0=c(bp), 
+#        y0=depth_occ_bySize_BAY-(depth_occ_bySize_BAY.sd)/sqrt(c(24,114,119)),
+#        x1=(bp),
+#        y1=depth_occ_bySize_BAY+(depth_occ_bySize_BAY.sd)/sqrt(c(24,114,119)),
+#        angle=90, code=3, length=0.1)
+# mtext("Bay", line=0.2, cex=2/3)
+# mtext("b)", line=0.2, cex=2/3, at=0)
+# 
+# bp=barplot(depth_occ_bySize_DELTA, ylim=c(-9,0), col=pal, names.arg=c("Below","Fishery","Above"),
+#            ylab="Elevation (m)")
+# arrows(x0=c(bp), 
+#        y0=depth_occ_bySize_DELTA-(depth_occ_bySize_DELTA.sd)/sqrt(c(24,114,119)),
+#        x1=(bp),
+#        y1=depth_occ_bySize_DELTA+(depth_occ_bySize_DELTA.sd)/sqrt(c(24,114,119)),
+#        angle=90, code=3, length=0.1)
+# mtext("Delta & SR", line=0.2, cex=2/3)
+# mtext("c)", line=0.2, cex=2/3, at=0)
+# 
+# dev.off()
