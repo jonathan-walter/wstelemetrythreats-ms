@@ -9,9 +9,11 @@ Code files included are:
 
 Data files included are:
 1) occupancyMatrix.csv: matrix of total occupancy (days) of unique fish-water year combinations at 15 sites. This is the main derived data product used in analyses.
-2) fish_to_use.csv: vector of fish meeting selection criteria.
-3) fishSummary.csv: miscellaneous attributes of fish selected for analysis.
-4) generalArea_coords.csv: geographic coordinates of locations with telemetry receives.
-5) sites_used.csv: geographic coordinates of locations used for analyses.
-6) statesp020.shp: used in plotting
-7) background_layer.shp: used in plotting
+2) detects_collapsed.csv: summarized and subsetted version of detection data used in ws_vs_hab analyses.
+3) fish_to_use.csv: vector of fish meeting selection criteria.
+4) fishSummary.csv: miscellaneous attributes of fish selected for analysis.
+5) generalArea_coords.csv: geographic coordinates of locations with telemetry receives.
+6) sites_used.csv: geographic coordinates of locations used for analyses.
+7) statesp020.shp: used in plotting
+8) background_layer.shp: used in plotting
+9) CA_hydrology_Polygon.scp: used in plotting
